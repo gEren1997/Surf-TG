@@ -204,3 +204,14 @@
 </script>
 
 </html>
+
+{% if tmdb_data %}
+<div class="tmdb-info">
+    <h2>{{ tmdb_data.title }} {% if tmdb_data.year %}({{ tmdb_data.year }}){% endif %}</h2>
+    <div class="rating">⭐ {{ tmdb_data.rating }}/10</div>
+    <p class="overview">{{ tmdb_data.overview }}</p>
+    {% if tmdb_data.backdrop %}
+    <img src="{{ tmdb_data.backdrop }}" class="backdrop-img" alt="Backdrop">
+    {% endif %}
+</div>
+{% endif %}
