@@ -23,3 +23,5 @@ class Telegram:
     WORKERS = int(getenv('WORKERS', '10'))
     MULTI_CLIENT = getenv('MULTI_CLIENT', 'False')
     HIDE_CHANNEL = getenv('HIDE_CHANNEL', 'False')
+    # TMDB Configuration
+    TMDB_API_KEY = getenv("TMDB_API_KEY", "")  # Optional - app works without it
