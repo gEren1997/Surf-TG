@@ -9,14 +9,12 @@ from asyncio import gather
 
 db = Database()
 
-
 async def fetch_message(chat_id, message_id):
     try:
         message = await StreamBot.get_messages(chat_id, message_id)
         return message
     except Exception as e:
         return None
-
 
 async def get_messages(chat_id, first_message_id, last_message_id, batch_size=50):
     messages = []
@@ -30,13 +28,12 @@ async def get_messages(chat_id, first_message_id, last_message_id, batch_size=50
                 if file := message.video or message.document:
                     title = file.file_name or message.caption or file.file_id
                     title, _ = splitext(title)
-                    title = re.sub(r'[.,|_\',]', ' ', title)
+                    title = re.sub(r'[.,|_\\,\']', ' ', title)
                     messages.append({"msg_id": message.id, "title": title,
                                      "hash": file.file_unique_id[:6], "size": get_readable_file_size(file.file_size),
                                      "type": file.mime_type, "chat_id": str(chat_id)})
         current_message_id += batch_size
     return messages
-
 
 async def get_files(chat_id, page=1):
     if Telegram.SESSION_STRING == '':
@@ -50,31 +47,50 @@ async def get_files(chat_id, page=1):
             continue
         title = file.file_name or post.caption or file.file_id
         title, _ = splitext(title)
-        title = re.sub(r'[.,|_\',]', ' ', title)
+        title = re.sub(r'[.,|_\\,\']', ' ', title)
         posts.append({"msg_id": post.id, "title": title,
-                    "hash": file.file_unique_id[:6], "size": get_readable_file_size(file.file_size), "type": file.mime_type})
+                      "hash": file.file_unique_id[:6], "size": get_readable_file_size(file.file_size), "type": file.mime_type})
     save_cache(chat_id, {"posts": posts}, page)
     return posts
 
 async def posts_file(posts, chat_id):
+    # Modified to support TMDB poster images
     phtml = """
-            <div class="col">
-                
-                    <div class="card text-white bg-primary mb-3">
-                        <input type="checkbox" class="admin-only form-check-input position-absolute top-0 end-0 m-2"
-                            onchange="checkSendButton()" id="selectCheckbox"
-                            data-id="{id}|{hash}|{title}|{size}|{type}|{img}">
-                        <img src="https://cdn.jsdelivr.net/gh/weebzone/weebzone/data/Surf-TG/src/loading.gif" class="lzy_img card-img-top rounded-top"
-                            data-src="{img}" alt="{title}">
-                        <a href="/watch/{chat_id}?id={id}&hash={hash}">
-                        <div class="card-body p-1">
-                            <h6 class="card-title">{title}</h6>
-                            <span class="badge bg-warning">{type}</span>
-                            <span class="badge bg-info">{size}</span>
+    <div class="col">
+        <div class="card shadow-sm">
+            <a href="/watch/{chat_id}?id={id}&hash={hash}" class="text-decoration-none text-reset">
+                <img src="{img}" class="bd-placeholder-img card-img-top" width="100%" height="225" alt="{title}" style="object-fit: cover;">
+                <div class="card-body">
+                    <p class="card-text">{title}</p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="btn-group">
+                            <span class="badge bg-primary rounded-pill">{type}</span>
+                            <span class="badge bg-secondary rounded-pill ms-1">{size}</span>
                         </div>
-                        </a>
                     </div>
-                
-            </div>
-"""
-    return ''.join(phtml.format(chat_id=str(chat_id).replace("-100", ""), id=post["msg_id"], img=f"/api/thumb/{chat_id}?id={post['msg_id']}", title=post["title"], hash=post["hash"], size=post['size'], type=post['type']) for post in posts)
+                </div>
+            </a>
+        </div>
+    </div>
+    """
+    
+    # Support for TMDB data in posts
+    html_parts = []
+    for post in posts:
+        img_url = f"/api/thumb/{chat_id}?id={post['msg_id']}"
+        
+        # Use TMDB poster if available
+        if post.get('tmdb_data') and post['tmdb_data'].get('poster'):
+            img_url = post['tmdb_data']['poster']
+        
+        html_parts.append(phtml.format(
+            chat_id=str(chat_id).replace("-100", ""),
+            id=post["msg_id"],
+            img=img_url,
+            title=post["title"],
+            hash=post["hash"],
+            size=post['size'],
+            type=post['type']
+        ))
+    
+    return ''.join(html_parts)
