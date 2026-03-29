@@ -39,7 +39,6 @@ async def login_route(request):
         return web.HTTPFound('/')
     data = await request.post()
     username = data.get('username')
-    password = = data.get('username')
     password = data.get('password')
     error_message = None
     if (username == Telegram.USERNAME and password == Telegram.PASSWORD) or (username == Telegram.ADMIN_USERNAME and password == Telegram.ADMIN_PASSWORD):
@@ -330,11 +329,8 @@ async def stream_handler_watch(request: web.Request):
             
             # Get TMDB metadata for watch page if enabled
             tmdb_data = None
-            if tmdb.enabled and message_id:
-                file_hash = secure_hash if secure_hash else None
-                if file_hash:
-                    # Try to get from cache first
-                    tmdb_data = await tmdb.get_metadata("", file_hash)
+            if tmdb.enabled and secure_hash:
+                tmdb_data = await tmdb.get_metadata("", secure_hash)
             
             return web.Response(text=await render_page(message_id, secure_hash, chat_id=chat_id, tmdb_data=tmdb_data), content_type='text/html')
         except InvalidHash as e:
