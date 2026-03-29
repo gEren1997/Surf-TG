@@ -25,13 +25,13 @@ async def start_services():
     except FloodWait as e:
         LOGGER.error(f"TELEGRAM FLOOD WAIT: Must wait {e.value} seconds ({e.value//60} minutes)")
         LOGGER.error("STOP THE SERVICE NOW and redeploy after the wait time!")
-        return False  # Return False to signal we shouldn't continue
+        return False
     except Exception as e:
         LOGGER.error(f"Failed to start Bot: {e}")
         return False
 
-    # Try UserBot if session string exists and looks valid
-    if Telegram.SESSION_STRING and len(str(Telegram.SESSION_STRING)) > 50:
+    # Try UserBot if it exists (was created with valid session string)
+    if UserBot:
         try:
             await UserBot.start()
             UserBot.username = UserBot.me.username or UserBot.me.first_name or UserBot.me.id
@@ -62,7 +62,7 @@ async def start_services():
 
         LOGGER.info("=" * 50)
         LOGGER.info("✅ Surf-TG Started Successfully!")
-        LOGGER.info(f"TMDB: {'✅' if Telegram.TMDB_API_KEY else '❌'} | UserBot: {'✅' if Telegram.SESSION_STRING else '❌'}")
+        LOGGER.info(f"TMDB: {'✅' if Telegram.TMDB_API_KEY else '❌'} | UserBot: {'✅' if UserBot else '❌'}")
         LOGGER.info("=" * 50)
         
         await idle()
@@ -77,13 +77,13 @@ async def stop_clients():
     try:
         await StreamBot.stop()
     except Exception:
-        pass  # Already stopped or never started
+        pass
     
-    if Telegram.SESSION_STRING:
+    if UserBot:
         try:
             await UserBot.stop()
         except Exception:
-            pass  # Already stopped or never started
+            pass
 
 if __name__ == '__main__':
     success = False
@@ -94,15 +94,12 @@ if __name__ == '__main__':
     except Exception:
         LOGGER.error(format_exc())
     finally:
-        # Always try to cleanup, but don't crash if it fails
         try:
             loop.run_until_complete(stop_clients())
         except Exception:
             pass
         
         if not success:
-            # Exit with error code so Koyeb knows it failed
-            # But use sys.exit to prevent automatic restart spam
             import sys
             sys.exit(1)
         
