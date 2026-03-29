@@ -198,3 +198,17 @@
 </script>
 
 </html>
+
+<!-- In the file card loop -->
+{% if file.tmdb_data %}
+<div class="tmdb-badge">
+    <span class="rating">⭐ {{ file.tmdb_data.rating }}</span>
+    {% if file.tmdb_data.year %}
+    <span class="year">{{ file.tmdb_data.year }}</span>
+    {% endif %}
+</div>
+{% if file.tmdb_data.poster %}
+<img src="{{ file.tmdb_data.poster }}" class="tmdb-poster" loading="lazy" 
+     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+{% endif %}
+{% endif %}
