@@ -36,30 +36,43 @@ async def get_messages(chat_id, first_message_id, last_message_id, batch_size=50
     return messages
 
 async def get_files(chat_id, page=1):
-    if Telegram.SESSION_STRING == '':
+    # If no valid session string, use database only
+    if not UserBot:
         return await db.list_tgfiles(id=chat_id, page=page)
+    
+    # Try to use UserBot cache, but fallback to database if it fails
     if cache := get_cache(chat_id, int(page)):
         return cache
-    posts = []
-    async for post in UserBot.get_chat_history(chat_id=int(chat_id), limit=50, offset=(int(page) - 1) * 50):
-        file = post.video or post.document
-        if not file:
-            continue
-        title = file.file_name or post.caption or file.file_id
-        title, _ = splitext(title)
-        title = re.sub(r'[.,|_\\,\']', ' ', title)
-        posts.append({"msg_id": post.id, "title": title,
-                      "hash": file.file_unique_id[:6], "size": get_readable_file_size(file.file_size), "type": file.mime_type})
-    save_cache(chat_id, {"posts": posts}, page)
-    return posts
+    
+    try:
+        # Check if UserBot is actually started
+        if not UserBot.is_connected:
+            raise Exception("UserBot not connected")
+            
+        posts = []
+        async for post in UserBot.get_chat_history(chat_id=int(chat_id), limit=50, offset=(int(page) - 1) * 50):
+            file = post.video or post.document
+            if not file:
+                continue
+            title = file.file_name or post.caption or file.file_id
+            title, _ = splitext(title)
+            title = re.sub(r'[.,|_\\,\']', ' ', title)
+            posts.append({"msg_id": post.id, "title": title,
+                          "hash": file.file_unique_id[:6], "size": get_readable_file_size(file.file_size), "type": file.mime_type})
+        save_cache(chat_id, {"posts": posts}, page)
+        return posts
+    except Exception as e:
+        # Fallback to database if UserBot fails
+        from bot import LOGGER
+        LOGGER.warning(f"UserBot unavailable, using database fallback: {e}")
+        return await db.list_tgfiles(id=chat_id, page=page)
 
 async def posts_file(posts, chat_id):
-    # Modified to support TMDB poster images
     phtml = """
     <div class="col">
         <div class="card shadow-sm">
             <a href="/watch/{chat_id}?id={id}&hash={hash}" class="text-decoration-none text-reset">
-                <img src="{img}" class="bd-placeholder-img card-img-top" width="100%" height="225" alt="{title}" style="object-fit: cover;">
+                <img src="{img}" class="bd-placeholder-img card-img-top" width="100%" height="225" alt="{title}" style="object-fit: cover;" loading="lazy" onerror="this.onerror=null;this.src='/api/thumb/{chat_id}?id={id}';">
                 <div class="card-body">
                     <p class="card-text">{title}</p>
                     <div class="d-flex justify-content-between align-items-center">
