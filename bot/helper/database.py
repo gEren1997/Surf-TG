@@ -123,3 +123,40 @@ class Database:
     
     async def add_btgfiles(self, data):
         result = self.files.insert_many(data)
+
+# ========== TMDB INTEGRATION METHODS ==========
+    
+    async def update_tmdb_metadata(self, file_hash: str, tmdb_data: dict):
+        """Update file document with TMDB metadata"""
+        if not tmdb_data:
+            return
+        try:
+            from datetime import datetime
+            tmdb_data['updated_at'] = datetime.now()
+            result = self.files.update_one(
+                {"hash": file_hash},
+                {"$set": {"tmdb_data": tmdb_data}}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            print(f'TMDB update error: {e}')
+            return False
+
+    async def get_tmdb_metadata(self, file_hash: str):
+        """Get cached TMDB metadata for a file"""
+        try:
+            file_doc = self.files.find_one({"hash": file_hash})
+            if file_doc and 'tmdb_data' in file_doc:
+                return file_doc['tmdb_data']
+            return None
+        except Exception as e:
+            print(f'TMDB get error: {e}')
+            return None
+
+    async def get_file_by_hash(self, file_hash: str):
+        """Get file document by hash (needed for TMDB lookup)"""
+        try:
+            return self.files.find_one({"hash": file_hash})
+        except Exception as e:
+            print(f'Get file error: {e}')
+            return None
