@@ -17,21 +17,20 @@ from bot.helper.index import get_files, posts_file
 from bot.server.custom_dl import ByteStreamer
 from bot.server.render_template import render_page
 from bot.helper.cache import rm_cache
+from bot.tmdb_integration import TMDBIntegration
 
 from bot.telegram import StreamBot
 
 client_cache = {}
-
 routes = web.RouteTableDef()
 db = Database()
-
+tmdb = TMDBIntegration(db)
 
 @routes.get('/login')
 async def login_form(request):
     session = await get_session(request)
     redirect_url = session.get('redirect_url', '/')
     return web.Response(text=await render_page(None, None, route='login', redirect_url=redirect_url), content_type='text/html')
-
 
 @routes.post('/login')
 async def login_route(request):
@@ -40,6 +39,7 @@ async def login_route(request):
         return web.HTTPFound('/')
     data = await request.post()
     username = data.get('username')
+    password = = data.get('username')
     password = data.get('password')
     error_message = None
     if (username == Telegram.USERNAME and password == Telegram.PASSWORD) or (username == Telegram.ADMIN_USERNAME and password == Telegram.ADMIN_PASSWORD):
@@ -51,15 +51,13 @@ async def login_route(request):
         return web.HTTPFound(redirect_url)
     else:
         error_message = "Invalid username or password"
-    return web.Response(text=await render_page(None, None, route='login', msg=error_message), content_type='text/html')
-
+        return web.Response(text=await render_page(None, None, route='login', msg=error_message), content_type='text/html')
 
 @routes.post('/logout')
 async def logout_route(request):
     session = await get_session(request)
     session.pop('user', None)
     return web.HTTPFound('/login')
-
 
 @routes.post('/create')
 async def create_route(request):
@@ -77,7 +75,6 @@ async def create_route(request):
     else:
         return web.HTTPFound(f'/playlist?db={parent_dir}')
 
-
 @routes.post('/delete')
 async def delete_route(request):
     session = await get_session(request)
@@ -92,7 +89,6 @@ async def delete_route(request):
         return web.HTTPFound('/')
     else:
         return web.HTTPFound(f'/playlist?db={parent}')
-
 
 @routes.post('/edit')
 async def editFolder_route(request):
@@ -112,7 +108,6 @@ async def editFolder_route(request):
     else:
         return web.HTTPFound(f'/playlist?db={parent}')
 
-
 @routes.post('/edit_post')
 async def editPost_route(request):
     session = await get_session(request)
@@ -131,7 +126,6 @@ async def editPost_route(request):
     else:
         return web.HTTPFound(f'/playlist?db={parent}')
 
-
 @routes.get('/searchDbFol')
 async def searchDbFolder_route(request):
     session = await get_session(request)
@@ -140,7 +134,6 @@ async def searchDbFolder_route(request):
     query = request.query.get('query', '')
     folder_names = await db.search_DbFolder(query)
     return web.json_response(folder_names)
-
 
 @routes.post('/send')
 async def send_route(request):
@@ -175,7 +168,6 @@ async def send_route(request):
     else:
         return web.HTTPFound(f'/playlist?db={folder_id}')
 
-
 @routes.get('/reload')
 async def reload_route(request):
     session = await get_session(request)
@@ -190,7 +182,6 @@ async def reload_route(request):
         rm_cache(f"-100{chat_id}")
         return web.HTTPFound(f'/channel/{chat_id}')
 
-
 @routes.post('/config')
 async def editConfig_route(request):
     session = await get_session(request)
@@ -203,8 +194,6 @@ async def editConfig_route(request):
     if not success:
         return web.HTTPInternalServerError()
     return web.HTTPFound('/')
-
-
 
 @routes.get('/')
 async def home_route(request):
@@ -223,7 +212,6 @@ async def home_route(request):
     else:
         session['redirect_url'] = request.path_qs
         return web.HTTPFound('/login')
-
 
 @routes.get('/playlist')
 async def playlist_route(request):
@@ -246,7 +234,6 @@ async def playlist_route(request):
         session['redirect_url'] = request.path_qs
         return web.HTTPFound('/login')
 
-
 @routes.get('/search/db/{parent}')
 async def dbsearch_route(request):
     session = await get_session(request)
@@ -268,7 +255,6 @@ async def dbsearch_route(request):
         session['redirect_url'] = request.path_qs
         return web.HTTPFound('/login')
 
-
 @routes.get('/channel/{chat_id}')
 async def channel_route(request):
     session = await get_session(request)
@@ -279,6 +265,11 @@ async def channel_route(request):
         is_admin = username == Telegram.ADMIN_USERNAME
         try:
             posts = await get_files(chat_id, page=page)
+            
+            # Enrich with TMDB metadata if enabled
+            if tmdb.enabled:
+                posts = await tmdb.enrich_posts(posts)
+            
             phtml = await posts_file(posts, chat_id)
             chat = await StreamBot.get_chat(int(chat_id))
             return web.Response(text=await render_page(None, None, route='index', html=phtml, msg=chat.title, chat_id=chat_id.replace("-100", ""), is_admin=is_admin), content_type='text/html')
@@ -288,7 +279,6 @@ async def channel_route(request):
     else:
         session['redirect_url'] = request.path_qs
         return web.HTTPFound('/login')
-
 
 @routes.get('/search/{chat_id}')
 async def search_route(request):
@@ -301,6 +291,11 @@ async def search_route(request):
         is_admin = username == Telegram.ADMIN_USERNAME
         try:
             posts = await search(chat_id, page=page, query=query)
+            
+            # Enrich with TMDB metadata if enabled
+            if tmdb.enabled:
+                posts = await tmdb.enrich_posts(posts)
+            
             phtml = await posts_file(posts, chat_id)
             chat = await StreamBot.get_chat(int(chat_id))
             text = f"{chat.title} - {query}"
@@ -311,7 +306,6 @@ async def search_route(request):
     else:
         session['redirect_url'] = request.path_qs
         return web.HTTPFound('/login')
-
 
 @routes.get('/api/thumb/{chat_id}', allow_head=True)
 async def get_thumbnail(request):
@@ -324,7 +318,6 @@ async def get_thumbnail(request):
     response.content_type = "image/jpeg"
     return response
 
-
 @routes.get('/watch/{chat_id}', allow_head=True)
 async def stream_handler_watch(request: web.Request):
     session = await get_session(request)
@@ -334,7 +327,16 @@ async def stream_handler_watch(request: web.Request):
             chat_id = f"-100{chat_id}"
             message_id = request.query.get('id')
             secure_hash = request.query.get('hash')
-            return web.Response(text=await render_page(message_id, secure_hash, chat_id=chat_id), content_type='text/html')
+            
+            # Get TMDB metadata for watch page if enabled
+            tmdb_data = None
+            if tmdb.enabled and message_id:
+                file_hash = secure_hash if secure_hash else None
+                if file_hash:
+                    # Try to get from cache first
+                    tmdb_data = await tmdb.get_metadata("", file_hash)
+            
+            return web.Response(text=await render_page(message_id, secure_hash, chat_id=chat_id, tmdb_data=tmdb_data), content_type='text/html')
         except InvalidHash as e:
             raise web.HTTPForbidden(text=e.message) from e
         except FIleNotFound as e:
@@ -349,14 +351,12 @@ async def stream_handler_watch(request: web.Request):
         session['redirect_url'] = request.path_qs
         return web.HTTPFound('/login')
 
-
 @routes.get('/{chat_id}/{encoded_name}', allow_head=True)
 async def stream_handler(request: web.Request):
     try:
         chat_id = request.match_info['chat_id']
         chat_id = f"-100{chat_id}"
         message_id = request.query.get('id')
-        #name = request.match_info['encoded_name']
         secure_hash = request.query.get('hash')
         return await media_streamer(request, int(chat_id), int(message_id), secure_hash)
     except InvalidHash as e:
@@ -370,9 +370,7 @@ async def stream_handler(request: web.Request):
         logging.critical(e.with_traceback(None))
         raise web.HTTPInternalServerError(text=str(e))
 
-
 class_cache = {}
-
 
 async def media_streamer(request: web.Request, chat_id: int, id: int, secure_hash: str):
     range_header = request.headers.get("Range", 0)
@@ -390,7 +388,7 @@ async def media_streamer(request: web.Request, chat_id: int, id: int, secure_has
         logging.debug(f"Creating new ByteStreamer object for client {index}")
         tg_connect = ByteStreamer(faster_client)
         class_cache[faster_client] = tg_connect
-    logging.debug("before calling get_file_properties")
+        logging.debug("before calling get_file_properties")
     file_id = await tg_connect.get_file_properties(chat_id=chat_id, message_id=id)
     logging.debug("after calling get_file_properties")
 
