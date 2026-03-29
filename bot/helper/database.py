@@ -3,7 +3,6 @@ from bson import ObjectId
 from bot.config import Telegram
 import re
 
-
 class Database:
     def __init__(self):
         MONGODB_URI = Telegram.DATABASE_URL
@@ -110,7 +109,6 @@ class Database:
                 "hash": hash, "title": name, "size": size, "type": file_type}
         self.files.insert_one(file)
 
-
     async def search_tgfiles(self, id, query, page=1, per_page=50):
         words = re.findall(r'\w+', query.lower())
         regex_pattern = '.*'.join(f'(?=.*{re.escape(word)})' for word in words)
@@ -120,16 +118,16 @@ class Database:
         mydoc = self.files.find(query).sort(
             'msg_id', DESCENDING).skip(offset).limit(per_page)
         return list(mydoc)
-    
+
     async def add_btgfiles(self, data):
         result = self.files.insert_many(data)
 
-# ========== TMDB INTEGRATION METHODS ==========
+    # ========== TMDB INTEGRATION METHODS ==========
     
     async def update_tmdb_metadata(self, file_hash: str, tmdb_data: dict):
         """Update file document with TMDB metadata"""
         if not tmdb_data:
-            return
+            return False
         try:
             from datetime import datetime
             tmdb_data['updated_at'] = datetime.now()
@@ -154,7 +152,7 @@ class Database:
             return None
 
     async def get_file_by_hash(self, file_hash: str):
-        """Get file document by hash (needed for TMDB lookup)"""
+        """Get file document by hash"""
         try:
             return self.files.find_one({"hash": file_hash})
         except Exception as e:
